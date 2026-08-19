@@ -2,108 +2,60 @@
 
 https://github.com/user-attachments/assets/f1c46930-3639-43b1-b6b0-a7d512f58d5a
 
-SmartCV-Tokon reads **MARVEL Tōkon: Fighting Souls** match state from the screen. No game mods. Polls one frame every 0.5s and prefers single-pixel / small-region color checks over template matching or OCR.
+SmartCV-Tokon is a tool designed to provide data on MARVEL Tōkon: Fighting Souls without the need for installing mods on your game, or the need for a powerful PC to read game data in real time. 
 
-OCR runs **once per game**, on the two HUD leader names, then latches. Everything else is pixel probes.
-
-Shared engine lives in `core/` ([smartcv-core](https://github.com/skpeter/smartcv-core)). Game logic is `routines.py`.
+It's a project that uses pixel detection to recognize certain situations in the game to take the opportunity to read data from using OCR. Due to this, it's able to gather enough data to report the results on a match (some assumptions given). Look for the **How does it work?** section to get a more in-depth explanation.
 
 ## Requirements
-
 - [OBS (optional if streaming)](https://obsproject.com/download)
-- Game UI must be **English**. Do not use UI mods.
-- Capture assumed **16:9**, coordinates authored at **1920×1080**.
+- [Advanced Scene Switcher OBS Plugin (optional if streaming)](https://github.com/WarmUpTill/SceneSwitcher/releases)
+- Your copy of MARVEL Tōkon: Fighting Souls must be in **English**. Support for other languages is being looked into.
+- You must disable all mods that change the UI or in-game text in any way.
 
 ## Step 1: Installation
-
-### CPU / release
-
-Download `release.zip` from [Releases](https://github.com/skpeter/SmartCV-Tokon/releases). Skip to step 2.
-
-### GPU / source
-
-- Download **source.zip** from the [latest release](https://github.com/skpeter/SmartCV-Tokon/releases/latest/download/source.zip). Do not use GitHub's auto-generated "Source code" zip — it is missing `core`.
-- Install [Python 3.12](https://www.python.org/downloads/).
-- `pip install -r core/requirements.txt`
-- Install PyTorch from [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/) (Stable, your OS, Pip, Python, your CUDA).
+- Follow either one of the two steps below:
+### Step 1.1: Installing the CPU version
+- Installing the CPU version is very easy. Just download the compiled release.zip [here](https://github.com/skpeter/SmartCV-Tokon/releases).
+- You can skip to step 2 from here.
+### Step 1.2: Installing the GPU version
+- Download **source.zip** from the [latest release](https://github.com/skpeter/SmartCV-Tokon/releases/latest/download/source.zip). Do not use GitHub's auto-generated "Source code" zip — it is missing the `core` files.
+- Install Python if you haven't done so already [here](https://www.python.org/downloads/). **Recommended version is 3.12**.
+- Open a command prompt terminal on the installed directory and type `pip install -r core/requirements.txt`
+- You will need to then install PyTorch, which is done through command prompt/terminal. Go to Pytorch's "Start Locally" section [here](https://pytorch.org/get-started/locally/), pick the **Stable** build, select the OS you use (**Windows, Mac or Linux**), **Pip** as packaging system, **Python** as language and then select the **Compute Platform** available on your GPU. You can check which version of CUDA your GPU supports [here](https://en.wikipedia.org/wiki/CUDA#GPUs_supported).
+![PyTorch installation page](img/install1.jpg)
+- - Choosing these options will generate a command that you should copy and paste on your terminal/command prompt. PyTorch weighs around 3GB, so take your time.
 
 ## Step 2: Setup
-
-Copy `core/config.ini.example` to `config.ini` in the repo root.
-
-### Game capture
-
-Set `executable_title` to a substring of the window title, default:
-
-```
-executable_title = MARVEL Tōkon: Fighting Souls
-```
-
-If the window is not found, check the title in Task Manager and put a unique substring here.
-
-### OBS capture
-
-Set `capture_mode = obs`, fill `[obs]` (`source_title`, host, port, password, width, height). Enable OBS Websocket.
+- Follow either one of the two steps below:
+### Step 1.1: Game Setup
+If you are running the game on the same device you are running SmartCV, you pretty much do not need to do anything else. Just open the game alongside SmartCV and it should detect the game's window by itself.
+### Step 2.2: OBS Setup 
+SmartCV reads game data directly from the OBS video source you put it on through OBS Websockets. **Make sure you have OBS Websocket enabled and configured before continuing**. Open your `config.ini` file, find a setting called `source_title`, insert the name of your OBS source, and that's it! Make sure the other OBS settings are correct so SmartCV can connect with OBS. `width` and `height` are the resolution of the image OBS sends. If you want to save up on some CPU usage, you can lower this resolution (as long as it's 16:9 aspect ration), however some things may not behave like normal if you do.
 
 ## Step 3: Usage
+- To run the GPU/source version, open a launch script: `smartcv.bat` (Windows), `smartcv.sh` (Linux), `smartcv.command` (macOS). Git clone: same files live under `core/`. CPU/release: `smartcv.exe`.
+**From here all you need to do is follow the on-screen instructions for the game detection to start.**
+**If using OBS, make sure it is open and do not disable the game capture source!**
 
-- Source: `smartcv.bat` / `smartcv.sh` / `smartcv.command` (git clone: same files under `core/`).
-- Release: `smartcv.exe`.
+## Troubleshooting
+- **When I run the app it says a bunch of code that ends with `ModuleNotFoundError: No module named 'torch'"` at the end! What do I do?**
 
-WebSocket JSON on port **6565** (configurable). UDP discovery on **6500**. Client integration: [S.M.A.R.T.](https://skpeter.github.io/smart-user-guide). Schema: `example-json.json`.
+Try restarting your system. If that doesn't work, append `py -m` to the code that installs PyTorch. For example: `py -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118`
 
-## Payload
+## Where do I use this?
+SmartCV opens a websocket server (on port 6565 by default) to send data to.
+As of this writing, only [S.M.A.R.T.](https://skpeter.github.io/smart-user-guide) has integrations to it. If you want to integrate SmartCV into your own app, you can look at what the data output looks like on the example JSON files.
 
-| Field | Meaning |
-| --- | --- |
-| `state` | `character_select` (stub), `loading`, `in_game`, `game_end` |
-| `round` | `p1.rounds + p2.rounds + 1` (never parsed from "ROUND N" / "FINAL ROUND") |
-| `players[n].character` | Current leader. OCR once, then latched |
-| `players[n].team` | 4 slots, always null until character-select footage exists |
-| `players[n].rounds` | Yellow star dots, first to 3 |
-| `players[n].games` | Counted internally. HUD has no set score; results `SCORE` goes past 9 |
+## Known Issues
 
-Versus screen = new **set** (games + rounds reset). Rematch skips versus → `BRACE YOURSELF` = new **game** (rounds reset, games kept).
+## How does it work?
 
-## Pixel probes (1080p)
+Explanation coming soon
 
-Retune these after a UI patch. All `x,y` are base 1920×1080; runtime multiplies by `scale_x` / `scale_y`.
-
-| Detector | Probe | Color | Dev |
-| --- | --- | --- | --- |
-| Versus | `(70, 930)` | `(255, 105, 0)` | 0.08 |
-| Versus | `(1750, 930)` | `(0, 165, 255)` | 0.08 |
-| Results top | `(100, 50)`, `(1820, 50)` | `(82, 187, 254)` | 0.05 |
-| Results bottom | `(100, 950)`, `(1820, 950)` | `(233, 223, 212)` | 0.05 |
-| Round start P1 HP box | `x 240–262, y 80–96` mean | `(252, 201, 0)` | 0.10 |
-| Round start P2 HP box | `x 1670–1692, y 80–96` mean | `(85, 254, 255)` | 0.12 |
-| K.O. glyph | `(1099, 467)`, `(720, 481)`, `(811, 481)`, `(1111, 508)`, `(988, 520)` | `(236, 222, 212)` | 0.055 |
-| K.O. negative guard | `(200, 540)`, `(1740, 540)` must **not** be cream | `(233, 223, 212)` | 0.06 |
-| HUD dots P1 (inner→outer) | `(824, 47)`, `(785, 48)`, `(747, 48)` | chroma `R-B>50, G-B>25, R>100` on 15×15 | — |
-| HUD dots P2 | `(1097, 48)`, `(1134, 48)`, `(1173, 48)` | same | — |
-| Results dots P1 | `(679, 882)`, `(641, 882)`, `(603, 882)` | same | — |
-| Results dots P2 | `(1241, 882)`, `(1279, 882)`, `(1317, 882)` | same | — |
-| BRACE YOURSELF | `(457, 407)`, `(854, 404)`, `(1002, 400)`, `(1246, 394)`, `(1490, 392)` | `(68, 70, 60)` | 0.08 |
-| Leader OCR (once) | P1 `(105, 18, 390, 44)`, P2 `(1420, 18, 415, 44)` | EasyOCR + roster fuzzy match | — |
-| Character select P1 | `(52, 82)`, `(50, 100)` | `(253, 114, 0)` | 0.08 |
-| Character select P2 | `(1830, 91)`, `(1850, 110)` | `(0, 180, 252)` | 0.08 |
-| Character select paper | `(40, 40)`, `(1880, 40)` | `(251, 242, 229)` | 0.05 |
-
-Do not move versus probes up: pause menu draws orange `P1` at top-left.
-
-## VOD replay (dev)
-
-```
-python dev/validate_vod.py path/to.mp4 --start 50 --end 380 --step 0.5
-```
-
-Walks the file at the same 0.5s interval SmartCV uses. `--ocr` enables the one-shot name read (slow).
-
-## Check out also
-
-- [SmartCV-SF6](https://github.com/skpeter/SmartCV-SF6)
-- [SmartCV-SSBU](https://github.com/skpeter/SmartCV-SSBU)
+## Check out also:
+- [SmartCV-SF6 for Street Fighter 6](https://github.com/skpeter/SmartCV-SF6)
+- [SmartCV-SSBU for Super Smash Bros. Ultimate](https://github.com/skpeter/SmartCV-SSBU)
 
 ## Contact
 
-[Discord](https://discord.gg/zecMKvF8b5)
+[I am mostly available on my team's Discord Server if you'd like to talk about SmartCV or have any additional questions.](https://discord.gg/zecMKvF8b5)
