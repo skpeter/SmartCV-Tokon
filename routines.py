@@ -89,12 +89,18 @@ BRACE_DEV = 0.08
 P1_NAME_RECT = (105, 18, 390, 44)
 P2_NAME_RECT = (1420, 18, 415, 44)
 
-# Character select: no footage yet. Fill these when CSS is captured.
-# CSS_POINT_A = (x, y)
-# CSS_COLOR_A = (r, g, b)
-# CSS_POINT_B = (x, y)
-# CSS_COLOR_B = (r, g, b)
-# CSS_DEV = 0.15
+# Character select: P1/P2 letter interiors + paper-beige top corners.
+# Versus uses the same orange/blue at y=930; pause has P1 orange only.
+# Beige (251,242,229) is tighter than results cream (233,223,212).
+CSS_P1 = ((52, 82), (50, 100))
+CSS_P2 = ((1830, 91), (1850, 110))
+CSS_BG = ((40, 40), (1880, 40))
+CSS_ORANGE = (253, 114, 0)
+CSS_BLUE = (0, 180, 252)
+CSS_BEIGE = (251, 242, 229)
+CSS_ORANGE_DEV = 0.08
+CSS_BLUE_DEV = 0.08
+CSS_BEIGE_DEV = 0.05
 
 
 def _debug():
@@ -175,9 +181,29 @@ def _reset_game(payload):
 
 
 def detect_character_select_screen(payload, img, scale_x, scale_y):
-    # No CSS footage yet. Slot kept so it can be filled without reshaping
-    # the state machine. Probe constants are commented at module top.
-    return
+    if not all(
+        core.is_within_deviation(_px(img, x, y, scale_x, scale_y), CSS_ORANGE, CSS_ORANGE_DEV)
+        for x, y in CSS_P1
+    ):
+        return
+    if not all(
+        core.is_within_deviation(_px(img, x, y, scale_x, scale_y), CSS_BLUE, CSS_BLUE_DEV)
+        for x, y in CSS_P2
+    ):
+        return
+    if not all(
+        core.is_within_deviation(_px(img, x, y, scale_x, scale_y), CSS_BEIGE, CSS_BEIGE_DEV)
+        for x, y in CSS_BG
+    ):
+        return
+    if _debug():
+        print("Character select pixels matched")
+    if payload["state"] == "character_select":
+        return
+    core.print_with_time("- Character select screen detected")
+    if payload["state"] in (None, "in_game", "game_end"):
+        _reset_set(payload)
+    _set_state(payload, "character_select")
 
 
 def detect_versus_screen(payload, img, scale_x, scale_y):

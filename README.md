@@ -85,7 +85,9 @@ Retune these after a UI patch. All `x,y` are base 1920×1080; runtime multiplies
 | Results dots P2 | `(1241, 882)`, `(1279, 882)`, `(1317, 882)` | same | — |
 | BRACE YOURSELF | `(457, 407)`, `(854, 404)`, `(1002, 400)`, `(1246, 394)`, `(1490, 392)` | `(68, 70, 60)` | 0.08 |
 | Leader OCR (once) | P1 `(105, 18, 390, 44)`, P2 `(1420, 18, 415, 44)` | EasyOCR + roster fuzzy match | — |
-| Character select | *empty — no footage yet* | — | — |
+| Character select P1 | `(52, 82)`, `(50, 100)` | `(253, 114, 0)` | 0.08 |
+| Character select P2 | `(1830, 91)`, `(1850, 110)` | `(0, 180, 252)` | 0.08 |
+| Character select paper | `(40, 40)`, `(1880, 40)` | `(251, 242, 229)` | 0.05 |
 
 Do not move versus probes up: pause menu draws orange `P1` at top-left.
 
