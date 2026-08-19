@@ -1,5 +1,7 @@
 # SmartCV-Tokon
 
+![SmartCV-Tokon](assets/demo.mp4)
+
 SmartCV-Tokon reads **MARVEL Tōkon: Fighting Souls** match state from the screen. No game mods. Polls one frame every 0.5s and prefers single-pixel / small-region color checks over template matching or OCR.
 
 OCR runs **once per game**, on the two HUD leader names, then latches. Everything else is pixel probes.
