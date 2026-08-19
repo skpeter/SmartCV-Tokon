@@ -1,0 +1,20 @@
+{
+    "state": "game_end",
+    "round": 0,
+    "players": [
+        {
+            "name": null,
+            "character": "Captain America",
+            "team": [null, null, null, null],
+            "games": 0,
+            "rounds": 2
+        },
+        {
+            "name": null,
+            "character": "Spider-Man",
+            "team": [null, null, null, null],
+            "games": 1,
+            "rounds": 3
+        }
+    ]
+}
