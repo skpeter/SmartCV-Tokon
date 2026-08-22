@@ -13,6 +13,8 @@ previous_states = [None]
 # Wall-clock source. VOD harness replaces this with video timestamp.
 _now = time.time
 ocr_enabled = True
+CHAR_OCR_MAX_TRIES = 5
+leader_ocr_attempts = 0
 
 payload = {
     "state": None,
@@ -156,7 +158,7 @@ def _count_stars(img, points, scale_x, scale_y):
 
 
 def _reset_set(payload):
-    global _results_latched, _game_awarded, _expect_round_start
+    global _results_latched, _game_awarded, _expect_round_start, leader_ocr_attempts
     payload["round"] = 0
     for player in payload["players"]:
         player["games"] = 0
@@ -166,10 +168,11 @@ def _reset_set(payload):
     _results_latched = False
     _game_awarded = False
     _expect_round_start = True
+    leader_ocr_attempts = 0
 
 
 def _reset_game(payload):
-    global _results_latched, _game_awarded, _expect_round_start
+    global _results_latched, _game_awarded, _expect_round_start, leader_ocr_attempts
     payload["round"] = 0
     for player in payload["players"]:
         player["rounds"] = 0
@@ -178,6 +181,7 @@ def _reset_game(payload):
     _results_latched = False
     _game_awarded = False
     _expect_round_start = True
+    leader_ocr_attempts = 0
 
 
 def detect_character_select_screen(payload, img, scale_x, scale_y):
@@ -243,10 +247,14 @@ def detect_match_starting(payload, img, scale_x, scale_y):
 
 
 def detect_leaders(payload, img, scale_x, scale_y):
+    global leader_ocr_attempts
     if not ocr_enabled:
         return
     if payload["players"][0]["character"] and payload["players"][1]["character"]:
         return
+    if leader_ocr_attempts >= CHAR_OCR_MAX_TRIES:
+        return
+    leader_ocr_attempts += 1
     texts = []
     for rect in (P1_NAME_RECT, P2_NAME_RECT):
         x, y, w, h = (
@@ -401,6 +409,7 @@ states_to_functions = {
     "in_game": [
         detect_character_select_screen,
         detect_round_start,
+        detect_leaders,
         detect_rounds,
         detect_ko,
         detect_results,
