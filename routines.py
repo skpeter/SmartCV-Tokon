@@ -24,20 +24,18 @@ payload = {
             "name": None,
             "character": None,
             "team": [None] * 4,
-            "games": 0,
             "rounds": 0,
         },
         {
             "name": None,
             "character": None,
             "team": [None] * 4,
-            "games": 0,
             "rounds": 0,
         },
     ],
 }
 
-# First-to-3. Versus screen = new set. Rematch skips versus and keeps games.
+# First-to-3. Versus screen = new set. Rematch skips versus (set score lives in S.M.A.R.T.).
 _expect_round_start = False
 _round_start_lock_until = 0.0
 _ko_lock_until = 0.0
@@ -161,7 +159,6 @@ def _reset_set(payload):
     global _results_latched, _game_awarded, _expect_round_start, leader_ocr_attempts
     payload["round"] = 0
     for player in payload["players"]:
-        player["games"] = 0
         player["rounds"] = 0
         player["character"] = None
         player["team"] = [None] * 4
@@ -384,14 +381,11 @@ def detect_results(payload, img, scale_x, scale_y):
         elif r1 != r2:
             winner = 0 if r1 > r2 else 1
         if winner is not None:
-            payload["players"][winner]["games"] += 1
             name = payload["players"][winner]["character"] or f"Player {winner + 1}"
             core.print_with_time(
                 f"{name} wins game "
                 f"({payload['players'][0]['rounds']}-"
-                f"{payload['players'][1]['rounds']})  "
-                f"set {payload['players'][0]['games']}-"
-                f"{payload['players'][1]['games']}"
+                f"{payload['players'][1]['rounds']})"
             )
             _game_awarded = True
     _expect_round_start = True
