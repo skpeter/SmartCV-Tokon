@@ -39,7 +39,7 @@ payload = {
 _expect_round_start = False
 _round_start_lock_until = 0.0
 _ko_lock_until = 0.0
-_results_latched = False
+_score_pending = False
 _game_awarded = False
 
 # Pause-menu orange P1 sits top-left. Versus probes stay at y=930 so they
@@ -49,14 +49,6 @@ _game_awarded = False
 VS_P1 = (70, 930, (255, 105, 0))
 VS_P2 = (1750, 930, (0, 165, 255))
 VS_DEV = 0.08
-
-# Light-blue top strip + cream bottom band. Both required: cream-only
-# loading transitions otherwise match the bottom probes.
-RES_TOP = ((100, 50), (1820, 50))
-RES_BOTTOM = ((100, 950), (1820, 950))
-RES_TOP_COLOR = (82, 187, 254)
-RES_BOTTOM_COLOR = (233, 223, 212)
-RES_DEV = 0.05
 
 # Outer HP tips. Bars deplete inward, so these are only colored at 100%.
 # Box mean: bar sheen animates single pixels.
@@ -77,8 +69,6 @@ KO_GUARD_DEV = 0.06
 # reads 0-0; never decrease a stored count.
 HUD_P1_DOTS = ((824, 47), (785, 48), (747, 48))
 HUD_P2_DOTS = ((1097, 48), (1134, 48), (1173, 48))
-RES_P1_DOTS = ((679, 882), (641, 882), (603, 882))
-RES_P2_DOTS = ((1241, 882), (1279, 882), (1317, 882))
 
 # BRACE YOURSELF olive text. Rematch has no versus screen.
 BRACE_POINTS = ((457, 407), (854, 404), (1002, 400), (1246, 394), (1490, 392))
@@ -148,36 +138,43 @@ def _is_star(img, x, y, scale_x, scale_y, half=7):
     if xb <= xa or yb <= ya:
         return False
     mean = arr[ya:yb, xa:xb].reshape(-1, 3).mean(0)
-    return (mean[0] - mean[2]) > 50 and (mean[1] - mean[2]) > 25 and mean[0] > 100
+    # Gold ring + black star hole averages R~130 in-match. Chroma (not R
+    # floor) separates coins from white empty slots (those have dR < 0).
+    return (mean[0] - mean[2]) > 70 and (mean[1] - mean[2]) > 40 and mean[0] > 110
 
 
 def _count_stars(img, points, scale_x, scale_y):
-    return sum(1 for x, y in points if _is_star(img, x, y, scale_x, scale_y))
+    n = 0
+    for x, y in points:
+        if not _is_star(img, x, y, scale_x, scale_y):
+            break
+        n += 1
+    return n
 
 
 def _reset_set(payload):
-    global _results_latched, _game_awarded, _expect_round_start, leader_ocr_attempts
+    global _game_awarded, _expect_round_start, _score_pending, leader_ocr_attempts
     payload["round"] = 0
     for player in payload["players"]:
         player["rounds"] = 0
         player["character"] = None
         player["team"] = [None] * 4
-    _results_latched = False
     _game_awarded = False
     _expect_round_start = True
+    _score_pending = False
     leader_ocr_attempts = 0
 
 
 def _reset_game(payload):
-    global _results_latched, _game_awarded, _expect_round_start, leader_ocr_attempts
+    global _game_awarded, _expect_round_start, _score_pending, leader_ocr_attempts
     payload["round"] = 0
     for player in payload["players"]:
         player["rounds"] = 0
         player["character"] = None
         player["team"] = [None] * 4
-    _results_latched = False
     _game_awarded = False
     _expect_round_start = True
+    _score_pending = False
     leader_ocr_attempts = 0
 
 
@@ -299,34 +296,46 @@ def detect_round_start(payload, img, scale_x, scale_y):
         payload["players"][0]["rounds"] + payload["players"][1]["rounds"] + 1
     )
     detect_leaders(payload, img, scale_x, scale_y)
-    detect_rounds(payload, img, scale_x, scale_y)
     core.print_with_time(f"Round {payload['round']} starting")
     _set_state(payload, "in_game")
 
 
 def detect_rounds(payload, img, scale_x, scale_y):
+    global _score_pending
     if payload["state"] != "in_game":
         return
     p1 = _count_stars(img, HUD_P1_DOTS, scale_x, scale_y)
     p2 = _count_stars(img, HUD_P2_DOTS, scale_x, scale_y)
-    if p1 == 0 and p2 == 0 and (
-        payload["players"][0]["rounds"] or payload["players"][1]["rounds"]
-    ):
-        # HUD hidden (K.O. / super cinematic). Keep last count.
-        return
-    if p1 < payload["players"][0]["rounds"] and p2 < payload["players"][1]["rounds"]:
-        return
-    if p1 >= payload["players"][0]["rounds"]:
-        payload["players"][0]["rounds"] = p1
-    if p2 >= payload["players"][1]["rounds"]:
-        payload["players"][1]["rounds"] = p2
     if _debug():
         print("HUD dots:", p1, p2)
+    if not _score_pending:
+        return
+    s1 = payload["players"][0]["rounds"]
+    s2 = payload["players"][1]["rounds"]
+    if p1 == 0 and p2 == 0:
+        # HUD hidden (K.O. / super cinematic). Keep waiting.
+        return
+    up1 = p1 > s1
+    up2 = p2 > s2
+    if up1 and up2:
+        # Both sides jumped — sky / wipe artifact, not a single round win.
+        return
+    if not (up1 or up2):
+        # Incomplete refill after wipe (e.g. 2-0 while stored 2-2).
+        return
+    payload["players"][0]["rounds"] = min(3, max(s1, p1))
+    payload["players"][1]["rounds"] = min(3, max(s2, p2))
+    _score_pending = False
+    _maybe_award_game(payload)
 
 
 def detect_ko(payload, img, scale_x, scale_y):
-    global _ko_lock_until, _expect_round_start
+    global _ko_lock_until, _expect_round_start, _score_pending
     if _now() < _ko_lock_until:
+        return
+    if payload["players"][0]["rounds"] >= 3 or payload["players"][1]["rounds"] >= 3:
+        return
+    if _expect_round_start:
         return
     hits = all(
         core.is_within_deviation(_px(img, x, y, scale_x, scale_y), KO_COLOR, KO_DEV)
@@ -343,51 +352,24 @@ def detect_ko(payload, img, scale_x, scale_y):
         return
     _ko_lock_until = _now() + 3
     _expect_round_start = True
+    _score_pending = True
     core.print_with_time("K.O.")
 
 
-def detect_results(payload, img, scale_x, scale_y):
-    global _results_latched, _game_awarded, _expect_round_start
-    top_ok = all(
-        core.is_within_deviation(
-            _px(img, x, y, scale_x, scale_y), RES_TOP_COLOR, RES_DEV
-        )
-        for x, y in RES_TOP
-    )
-    bot_ok = all(
-        core.is_within_deviation(
-            _px(img, x, y, scale_x, scale_y), RES_BOTTOM_COLOR, RES_DEV
-        )
-        for x, y in RES_BOTTOM
-    )
-    if not (top_ok and bot_ok):
+def _maybe_award_game(payload):
+    global _game_awarded, _expect_round_start
+    if _game_awarded:
         return
-    if not _results_latched:
-        r1 = _count_stars(img, RES_P1_DOTS, scale_x, scale_y)
-        r2 = _count_stars(img, RES_P2_DOTS, scale_x, scale_y)
-        if _debug():
-            print("Results dots:", r1, r2)
-        # Latch the first reading. ORDER SELECT later slides over the dots.
-        if r1 or r2:
-            payload["players"][0]["rounds"] = max(payload["players"][0]["rounds"], r1)
-            payload["players"][1]["rounds"] = max(payload["players"][1]["rounds"], r2)
-        _results_latched = True
-    if not _game_awarded:
-        r1 = payload["players"][0]["rounds"]
-        r2 = payload["players"][1]["rounds"]
-        winner = None
-        if r1 >= 3 or r2 >= 3:
-            winner = 0 if r1 >= r2 else 1
-        elif r1 != r2:
-            winner = 0 if r1 > r2 else 1
-        if winner is not None:
-            name = payload["players"][winner]["character"] or f"Player {winner + 1}"
-            core.print_with_time(
-                f"{name} wins game "
-                f"({payload['players'][0]['rounds']}-"
-                f"{payload['players'][1]['rounds']})"
-            )
-            _game_awarded = True
+    r1 = payload["players"][0]["rounds"]
+    r2 = payload["players"][1]["rounds"]
+    if r1 < 3 and r2 < 3:
+        return
+    if r1 == r2:
+        return
+    winner = 0 if r1 > r2 else 1
+    name = payload["players"][winner]["character"] or f"Player {winner + 1}"
+    core.print_with_time(f"{name} wins game ({r1}-{r2})")
+    _game_awarded = True
     _expect_round_start = True
     _set_state(payload, "game_end")
 
@@ -402,14 +384,13 @@ states_to_functions = {
     "loading": [detect_round_start],
     "in_game": [
         detect_character_select_screen,
+        detect_versus_screen,
         detect_round_start,
         detect_leaders,
         detect_rounds,
         detect_ko,
-        detect_results,
     ],
     "game_end": [
-        detect_results,
         detect_character_select_screen,
         detect_versus_screen,
         detect_match_starting,
