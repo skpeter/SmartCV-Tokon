@@ -14,7 +14,9 @@ previous_states = [None]
 _now = time.time
 ocr_enabled = True
 CHAR_OCR_MAX_TRIES = 5
+NAME_OCR_MAX_TRIES = 5
 leader_ocr_attempts = 0
+name_ocr_attempts = 0
 
 payload = {
     "state": None,
@@ -78,6 +80,12 @@ BRACE_DEV = 0.08
 # Leader nameplates. P2 is right-aligned; rect anchored at the right edge.
 P1_NAME_RECT = (105, 18, 390, 44)
 P2_NAME_RECT = (1420, 18, 415, 44)
+
+# Versus online IDs above the team slots (icons + white text). Offline has
+# neither — OCR is best-effort and must never gate versus detection.
+VS_P1_NAME_RECT = (40, 585, 450, 60)
+VS_P2_NAME_RECT = (1480, 585, 420, 60)
+_NAME_JUNK = frozenset({"none", "p1", "p2", "vs", "x"})
 
 # Character select: P1/P2 letter interiors + paper-beige top corners.
 # Versus uses the same orange/blue at y=930; pause has P1 orange only.
@@ -153,9 +161,11 @@ def _count_stars(img, points, scale_x, scale_y):
 
 
 def _reset_set(payload):
-    global _game_awarded, _expect_round_start, _score_pending, leader_ocr_attempts
+    global _game_awarded, _expect_round_start, _score_pending
+    global leader_ocr_attempts, name_ocr_attempts
     payload["round"] = 0
     for player in payload["players"]:
+        player["name"] = None
         player["rounds"] = 0
         player["character"] = None
         player["team"] = [None] * 4
@@ -163,10 +173,12 @@ def _reset_set(payload):
     _expect_round_start = True
     _score_pending = False
     leader_ocr_attempts = 0
+    name_ocr_attempts = 0
 
 
 def _reset_game(payload):
-    global _game_awarded, _expect_round_start, _score_pending, leader_ocr_attempts
+    global _game_awarded, _expect_round_start, _score_pending
+    global leader_ocr_attempts, name_ocr_attempts
     payload["round"] = 0
     for player in payload["players"]:
         player["rounds"] = 0
@@ -176,6 +188,7 @@ def _reset_game(payload):
     _expect_round_start = True
     _score_pending = False
     leader_ocr_attempts = 0
+    name_ocr_attempts = 0
 
 
 def detect_character_select_screen(payload, img, scale_x, scale_y):
@@ -204,6 +217,47 @@ def detect_character_select_screen(payload, img, scale_x, scale_y):
     _set_state(payload, "character_select")
 
 
+def _clean_player_name(raw: str) -> str | None:
+    text = " ".join((raw or "").split()).strip(" .-_|:;'\"()")
+    parts = text.split()
+    # Platform icon OCR often prepends a 1-char scrap (O, D, 0, …).
+    while parts and (len(parts[0]) <= 1 or parts[0].lower() in _NAME_JUNK):
+        parts = parts[1:]
+    text = " ".join(parts).strip(" .-_|:;'\"()")
+    if len(text) < 2:
+        return None
+    if text.lower() in _NAME_JUNK:
+        return None
+    return text
+
+
+def _ocr_versus_names(payload, img, scale_x, scale_y):
+    """Best-effort online IDs. Offline / miss → leave name None."""
+    global name_ocr_attempts
+    if not ocr_enabled:
+        return
+    if payload["players"][0]["name"] and payload["players"][1]["name"]:
+        return
+    if name_ocr_attempts >= NAME_OCR_MAX_TRIES:
+        return
+    name_ocr_attempts += 1
+    for i, rect in enumerate((VS_P1_NAME_RECT, VS_P2_NAME_RECT)):
+        if payload["players"][i]["name"]:
+            continue
+        x, y, w, h = (
+            int(rect[0] * scale_x),
+            int(rect[1] * scale_y),
+            int(rect[2] * scale_x),
+            int(rect[3] * scale_y),
+        )
+        result = core.read_text(img, (x, y, w, h), contrast=2, low_text=0.3)
+        name = _clean_player_name(" ".join(result) if result else "")
+        if not name:
+            continue
+        payload["players"][i]["name"] = name
+        core.print_with_time(f"Player {i + 1} name:", name)
+
+
 def detect_versus_screen(payload, img, scale_x, scale_y):
     p1 = _px(img, VS_P1[0], VS_P1[1], scale_x, scale_y)
     p2 = _px(img, VS_P2[0], VS_P2[1], scale_x, scale_y)
@@ -218,6 +272,8 @@ def detect_versus_screen(payload, img, scale_x, scale_y):
         core.print_with_time("- Versus screen detected (new set)")
         _reset_set(payload)
         _set_state(payload, "loading")
+    # Names optional (offline has none). Never block loading transition.
+    _ocr_versus_names(payload, img, scale_x, scale_y)
 
 
 def detect_match_starting(payload, img, scale_x, scale_y):
@@ -381,7 +437,8 @@ states_to_functions = {
         detect_match_starting,
     ],
     "character_select": [detect_versus_screen, detect_round_start, detect_match_starting],
-    "loading": [detect_round_start],
+    # Versus stays on loading so name OCR can retry while pixels still match.
+    "loading": [detect_versus_screen, detect_round_start],
     "in_game": [
         detect_character_select_screen,
         detect_versus_screen,
