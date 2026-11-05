@@ -208,7 +208,7 @@ def detect_character_select_screen(payload, img, scale_x, scale_y):
     ):
         return
     if _debug():
-        print("Character select pixels matched")
+        core.print_with_time("Character select pixels matched", debug_only=True)
     if payload["state"] == "character_select":
         return
     core.print_with_time("- Character select screen detected")
@@ -262,7 +262,7 @@ def detect_versus_screen(payload, img, scale_x, scale_y):
     p1 = _px(img, VS_P1[0], VS_P1[1], scale_x, scale_y)
     p2 = _px(img, VS_P2[0], VS_P2[1], scale_x, scale_y)
     if _debug():
-        print("Versus screen pixels:", p1, p2)
+        core.print_with_time("Versus screen pixels:", p1, p2, debug_only=True)
     if not (
         core.is_within_deviation(p1, VS_P1[2], VS_DEV)
         and core.is_within_deviation(p2, VS_P2[2], VS_DEV)
@@ -284,7 +284,7 @@ def detect_match_starting(payload, img, scale_x, scale_y):
         if core.is_within_deviation(pixel, BRACE_COLOR, BRACE_DEV):
             hits += 1
     if _debug():
-        print("BRACE olive hits:", hits)
+        core.print_with_time("BRACE olive hits:", hits, debug_only=True)
     if hits < len(BRACE_POINTS):
         return
     if payload["state"] in (None, "game_end", "character_select"):
@@ -339,7 +339,7 @@ def detect_round_start(payload, img, scale_x, scale_y):
     p1 = _region_mean(img, HP_P1[0], HP_P1[1], HP_P1[2], HP_P1[3], scale_x, scale_y)
     p2 = _region_mean(img, HP_P2[0], HP_P2[1], HP_P2[2], HP_P2[3], scale_x, scale_y)
     if _debug():
-        print("HP box means:", p1, p2)
+        core.print_with_time("HP box means:", p1, p2, debug_only=True)
     if not (
         core.is_within_deviation(p1, HP_P1[4], HP_P1[5])
         and core.is_within_deviation(p2, HP_P2[4], HP_P2[5])
@@ -363,7 +363,7 @@ def detect_rounds(payload, img, scale_x, scale_y):
     p1 = _count_stars(img, HUD_P1_DOTS, scale_x, scale_y)
     p2 = _count_stars(img, HUD_P2_DOTS, scale_x, scale_y)
     if _debug():
-        print("HUD dots:", p1, p2)
+        core.print_with_time("HUD dots:", p1, p2, debug_only=True)
     if not _score_pending:
         return
     s1 = payload["players"][0]["rounds"]
